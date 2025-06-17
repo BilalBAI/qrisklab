@@ -20,7 +20,7 @@ class StressTestEngine:
         else:
             print(f"Mode {mode}: Not Supported")
 
-    def update_valuation_datetime(self, dt_str=None):
+    def set_valuation_datetime(self, dt_str=None):
         # valuation_datetime: e.g. "2025-06-17 13:45:30"
         # Always use UTC
         if dt_str is None:
