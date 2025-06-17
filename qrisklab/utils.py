@@ -2,6 +2,7 @@ from __future__ import annotations
 from datetime import datetime, date, timedelta
 import pandas as pd
 import numpy as np
+import os
 
 
 def parse_date(date_str):
@@ -44,6 +45,24 @@ def process_instruments(df: pd.DataFrame, valuation_day: str):
     df['expiry'] = df['expiry'].dt.strftime('%Y-%m-%d')
 
     return df
+
+
+def save_excel(df, file_path):
+    """
+    Saves a Pandas DataFrame to an Excel file, creating the directory if it doesn't exist.
+    """
+    directory = os.path.dirname(file_path)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+    df.to_excel(file_path, index=False)
+
+
+def generate_timestamps(start_time='2024-12-01 00:00:00', end_time='2024-12-27 00:00:00', frequency='1h'):
+    start_time = pd.to_datetime(start_time).floor('min')
+    end_time = pd.to_datetime(end_time).floor('min')
+    timestamps = pd.date_range(start=start_time, end=end_time, freq=frequency)
+    unix_timestamps_ms = [int(timestamp.timestamp() * 1000) for timestamp in timestamps]
+    return unix_timestamps_ms
 
 
 def net(df, all_flds, group_by):
