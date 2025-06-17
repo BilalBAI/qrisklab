@@ -32,7 +32,7 @@ class StressTestEngine:
         """
         df_market_data: Options market data to fit SVI Model
         """
-        missing_columns = ['IV', 'Strike', 'Date', 'Tau', 'F', 'S'] - set(df_market_data.columns)
+        missing_columns = set(['IV', 'Strike', 'Date', 'Tau', 'F', 'S']) - set(df_market_data.columns)
         if missing_columns:
             raise ValueError(f"Missing columns: {', '.join(missing_columns)}")
 
@@ -40,14 +40,14 @@ class StressTestEngine:
         svim = SVIModel(df_market_data[['IV', 'Strike', 'Date', 'Tau', 'F']].drop_duplicates(['IV', 'Strike', 'Date']))
         df_fit = svim.fit(no_butterfly=False, no_calendar=False).reset_index(
             drop=False).rename(columns={'index': 'Date'})
-        df_fit = pd.merge(df_fit, df_market_data[['Date', 'F', 'time_to_expiry']].drop_duplicates(
+        df_fit = pd.merge(df_fit, df_market_data[['Date', 'F', 'S', 'time_to_expiry']].drop_duplicates(
             subset=['Date'], keep='first'), on='Date', how='left')
         df_fit['tt'] = df_fit['time_to_expiry']
         self.svi_df = df_fit
 
     def update_positions(self, df_pos, ticker):
 
-        missing_columns = ['instrument', 'multiplier', 'quantity'] - set(df_pos.columns)
+        missing_columns = set(['instrument', 'multiplier', 'quantity']) - set(df_pos.columns)
         if missing_columns:
             raise ValueError(f"Missing columns: {', '.join(missing_columns)}")
 
