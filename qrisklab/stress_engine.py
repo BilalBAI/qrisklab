@@ -7,9 +7,8 @@ from .utils import process_instruments
 
 
 class StressTestEngine:
-    def __init__(self, mode='sticky_delta', frequency='1h', vol_model='SVI', time_to_expiry_offset=-1 / 365) -> None:
+    def __init__(self, mode='sticky_delta', vol_model='SVI', time_to_expiry_offset=-1 / 365) -> None:
         self.mode = mode
-        self.frequency = frequency
         self.positions = pd.DataFrame()
         self.vol_model = vol_model
         # TODO:  enable Wing Model
@@ -29,35 +28,35 @@ class StressTestEngine:
         else:
             self.valuation_datetime = datetime.datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S")
 
-    def update_vol_curves(self, df):
+    def update_vol_curves(self, df_market_data):
         """
-        df: Options market data to fit SVI Model
+        df_market_data: Options market data to fit SVI Model
         """
-        missing_columns = ['IV', 'Strike', 'Date', 'Tau', 'F', 'S'] - set(df.columns)
+        missing_columns = ['IV', 'Strike', 'Date', 'Tau', 'F', 'S'] - set(df_market_data.columns)
         if missing_columns:
             raise ValueError(f"Missing columns: {', '.join(missing_columns)}")
 
-        df = df[df['Tau'] > 0]
-        svim = SVIModel(df[['IV', 'Strike', 'Date', 'Tau', 'F']].drop_duplicates(['IV', 'Strike', 'Date']))
+        df_market_data = df_market_data[df_market_data['Tau'] > 0]
+        svim = SVIModel(df_market_data[['IV', 'Strike', 'Date', 'Tau', 'F']].drop_duplicates(['IV', 'Strike', 'Date']))
         df_fit = svim.fit(no_butterfly=False, no_calendar=False).reset_index(
             drop=False).rename(columns={'index': 'Date'})
-        df_fit = pd.merge(df_fit, df[['Date', 'F', 'time_to_expiry']].drop_duplicates(
+        df_fit = pd.merge(df_fit, df_market_data[['Date', 'F', 'time_to_expiry']].drop_duplicates(
             subset=['Date'], keep='first'), on='Date', how='left')
         df_fit['tt'] = df_fit['time_to_expiry']
         self.svi_df = df_fit
 
-    def update_positions(self, df, ticker):
+    def update_positions(self, df_pos, ticker):
 
-        missing_columns = ['instrument', 'multiplier', 'quantity'] - set(df.columns)
+        missing_columns = ['instrument', 'multiplier', 'quantity'] - set(df_pos.columns)
         if missing_columns:
             raise ValueError(f"Missing columns: {', '.join(missing_columns)}")
 
         print('Process Positions')
-        df = self._process_positions(df).copy()
-        df = df[df['underlying'].str.contains(ticker)]
-        df['underlying'] = ticker
-        df = df[df['time_to_expiry'] != 0]
-        self.positions = df.copy()
+        df_pos = self._process_positions(df_pos).copy()
+        df_pos = df_pos[df_pos['underlying'].str.contains(ticker)]
+        df_pos['underlying'] = ticker
+        df_pos = df_pos[df_pos['time_to_expiry'] != 0]
+        self.positions = df_pos.copy()
 
     def shock(self, spot_shock, vol_shock, name='stress_pnl'):
         df = self.positions.copy()
