@@ -224,6 +224,207 @@ def calc_greeks_df(df: pd.DataFrame, prefix: str = '', suffix: str = '') -> pd.D
     return df_final
 
 
+def calc_greeks_fdm(strike, time_to_expiry, spot, rate, vol, put_call, cost_of_carry_rate='default', normalized_greeks=False, trading_days=365, prefix='', suffix=''):
+    """
+    Calculate option Greeks using the Finite Difference Method (FDM) based on Black-Scholes-Merton pricing.
+
+    Supports:
+        b=r  # default: Black-Scholes for European stock options without dividends (Black and Scholes, 1973)
+        b=r−q  # Merton's model for stock options with continuous dividend yield q (Merton, 1973)
+        b=0  # Black's model for futures options (Black, 1976)
+        b=0 and r=0  # Asay's margined futures option model (Asay, 1982)
+        b=r−rj  # Garman-Kohlhagen model for currency options (Garman and Kohlhagen, 1983)
+
+    Inputs:
+        strike: Option strike price
+        time_to_expiry: Time to expiry in years
+        spot: Underlying asset price
+        rate: Risk-free interest rate
+        vol: Volatility (standard deviation of returns)
+        put_call: 'call', 'put', 'c', or 'p'
+        cost_of_carry_rate: Optional cost of carry (defaults to rate)
+        normalized_greeks: If True, normalize Greeks (default: False)
+        trading_days: Number of trading days per year (default: 365)
+        prefix: String prefix for output dictionary keys (default: '')
+        suffix: String suffix for output dictionary keys (default: '')
+        inverse: If True, invert spot and strike (default: False)
+
+    Returns:
+        Dictionary with keys: {prefix}delta{suffix}, {prefix}gamma{suffix}, {prefix}vega{suffix}, {prefix}theta{suffix}
+    """
+
+    # Handle non-option case
+    if put_call not in ['put', 'call', 'p', 'c']:
+        delta = spot if normalized_greeks else 1
+        return {
+            f'{prefix}delta{suffix}': delta,
+            f'{prefix}gamma{suffix}': 0,
+            f'{prefix}vega{suffix}': 0,
+            f'{prefix}theta{suffix}': 0
+        }
+
+    # Handle expired options or zero volatility
+    if time_to_expiry <= 0 or vol == 0:
+        return {
+            f'{prefix}delta{suffix}': 0,
+            f'{prefix}gamma{suffix}': 0,
+            f'{prefix}vega{suffix}': 0,
+            f'{prefix}theta{suffix}': 0
+        }
+
+    # Define small perturbations for finite differences
+    ds = 0.001 * spot  # Small change in spot price (e.g., 0.1% of spot)
+    dt = time_to_expiry / 1000  # Small change in time (e.g., ~1/1000 of time to expiry)
+    dv = 0.0001  # Small change in volatility (e.g., 0.01%)
+
+    # Compute base option price
+    V = bs_pricing(strike, time_to_expiry, spot, rate, vol, put_call, cost_of_carry_rate)
+
+    # Delta: (∂V/∂S) ≈ (V(S + ΔS) - V(S - ΔS)) / (2 * ΔS)
+    V_plus_ds = bs_pricing(strike, time_to_expiry, spot + ds, rate, vol, put_call, cost_of_carry_rate)
+    V_minus_ds = bs_pricing(strike, time_to_expiry, spot - ds, rate, vol, put_call, cost_of_carry_rate)
+    delta = (V_plus_ds - V_minus_ds) / (2 * ds)
+
+    # Gamma: (∂²V/∂S²) ≈ (V(S + ΔS) - 2V(S) + V(S - ΔS)) / (ΔS²)
+    gamma = (V_plus_ds - 2 * V + V_minus_ds) / (ds ** 2)
+
+    # Vega: (∂V/∂σ) ≈ (V(σ + Δσ) - V(σ - Δσ)) / (2 * Δσ)
+    V_plus_dv = bs_pricing(strike, time_to_expiry, spot, rate, vol + dv, put_call, cost_of_carry_rate)
+    V_minus_dv = bs_pricing(strike, time_to_expiry, spot, rate, vol - dv, put_call, cost_of_carry_rate)
+    vega = (V_plus_dv - V_minus_dv) / (2 * dv)
+
+    # Theta: (∂V/∂t) ≈ -(V(t) - V(t - Δt)) / Δt
+    # Note: Theta measures price decay, so we use backward difference and negate
+    V_minus_dt = bs_pricing(strike, time_to_expiry - dt, spot, rate, vol, put_call, cost_of_carry_rate)
+    theta = -(V - V_minus_dt) / dt
+
+    # Normalization
+    if normalized_greeks:
+        delta = delta * spot  # Delta in USD
+        gamma = gamma * (spot ** 2) / 100  # Gamma in USD per 1% spot change
+        vega = vega / 100  # Vega in USD per 1% volatility change
+        theta = theta / trading_days  # Theta in USD per day
+
+    return {
+        f'{prefix}delta{suffix}': delta,
+        f'{prefix}gamma{suffix}': gamma,
+        f'{prefix}vega{suffix}': vega,
+        f'{prefix}theta{suffix}': theta
+    }
+
+
+def calc_implied_volatility(spot, strike, time_to_expiry, rate, market_price, put_call='call'):
+    """
+    Calculate implied volatility for a European option (call or put) given the market price.
+
+    spot : float : spot price of the underlying asset
+    strike : float : strike price of the option
+    time_to_expiry : float : time to expiry in years
+    rate : float : risk-free interest rate (annual)
+    market_price : float : market price of the option
+    put_call : str : type of option ('call' or 'put')
+
+    Returns:
+    iv : float : implied volatility (annual)
+    """
+    # Define the objective function (difference between market price and model price)
+    def objective(vol):
+        return bs_pricing(strike, time_to_expiry, spot, rate, vol, put_call, cost_of_carry_rate='default') - market_price
+
+    # Use numerical solver to find implied volatility that results in the market price
+    iv = brentq(objective, 1e-6, 5)  # Bounded between 1e-6 and 5
+    return iv
+
+
+def calc_prob_exe(strike, time_to_expiry, spot, rate, vol, put_call, cost_of_carry_rate='default'):
+    '''
+    Calculate risk neutral probability of exercise
+    For calls: N(d2)
+    For puts: N(-d2)
+
+    Inputs Example:
+        strike = 450
+        t = date(year=2020,month=7,day=30)-date.today()
+        time_to_expiry = t.days/365
+        put_call = 'put'
+        vol = 0.3058
+        spot = 451.6
+        rate = 0.00893
+
+    '''
+    r = rate
+    # Price Expired Option and 0 vol with their intrinsic value
+    if ((time_to_expiry <= 0) or (vol == 0)) and (put_call == 'call'):
+        return min(0, spot - strike)
+    elif ((time_to_expiry <= 0) or (vol == 0)) and (put_call == 'put'):
+        return min(0, strike - spot)
+    # Reset underlying spot to a small number if it's 0 (The formula cannot take 0 underlying spot)
+    if spot == 0:
+        spot = 0.0000001
+    if cost_of_carry_rate == 'default':
+        b = r
+    else:
+        b = cost_of_carry_rate
+    # Calc N(d2) or N(-d2)
+    if put_call in ['put', 'call', 'p', 'c']:
+        d1 = (math.log(spot / strike) + (b + vol**2 / 2) * time_to_expiry) / (vol * time_to_expiry**0.5)
+        d2 = d1 - vol * time_to_expiry**0.5
+        if put_call in ['call', 'c']:
+            return norm.cdf(d2)
+        else:
+            return norm.cdf(-d2)
+    else:
+        return None
+
+
+def bt_pricing(strike, time_to_expiry, spot, rate, vol, put_call, N=25000):
+    '''
+    Binomial Tree Pricing for American Options
+
+    spot: spot stock price
+    strike: strike price
+    time_to_expiry: time to maturity in years
+    rate: risk free rate
+    vol: diffusion coefficient or volatility
+
+    N: number of periods or number of time steps
+    put_call: put or call
+
+    reference: https://github.com/cantaro86/Financial-Models-Numerical-Methods
+
+    '''
+
+    dT = float(time_to_expiry) / N  # Delta t
+    u = np.exp(vol * np.sqrt(dT))  # up factor
+    d = 1.0 / u  # down factor
+
+    V = np.zeros(N + 1)  # initialize the price vector
+    S_T = np.array([(spot * u**j * d ** (N - j)) for j in range(N + 1)])  # price S_T at time T
+
+    a = np.exp(rate * dT)  # risk free compound return
+    p = (a - d) / (u - d)  # risk neutral up probability
+    q = 1.0 - p  # risk neutral down probability
+
+    if put_call == "call":
+        V[:] = np.maximum(S_T - strike, 0.0)
+    elif put_call == "put":
+        V[:] = np.maximum(strike - S_T, 0.0)
+
+    for i in range(N - 1, -1, -1):
+        V[:-1] = np.exp(-rate * dT) * (p * V[1:] + q * V[:-1])  # the price vector is overwritten at each step
+        S_T = S_T * u  # it is a tricky way to obtain the price at the previous time step
+        if put_call == "call":
+            V = np.maximum(V, S_T - strike)
+        elif put_call == "put":
+            V = np.maximum(V, strike - S_T)
+
+    return V[0]
+
+
+####################################################################################################
+# Legacy
+####################################################################################################
+
 def calc_delta(strike, time_to_expiry, spot, rate, vol, put_call, cost_of_carry_rate='default'):
     r = rate
     # return 1 if not an option type
@@ -342,111 +543,3 @@ def calc_vega_df(df: pd.DataFrame):
     df['position_vega'] = df['vega'] * df['quantity'] * df[
         'multiplier']
     return df
-
-
-def calc_implied_volatility(spot, strike, time_to_expiry, rate, market_price, put_call='call'):
-    """
-    Calculate implied volatility for a European option (call or put) given the market price.
-
-    spot : float : spot price of the underlying asset
-    strike : float : strike price of the option
-    time_to_expiry : float : time to expiry in years
-    rate : float : risk-free interest rate (annual)
-    market_price : float : market price of the option
-    put_call : str : type of option ('call' or 'put')
-
-    Returns:
-    iv : float : implied volatility (annual)
-    """
-    # Define the objective function (difference between market price and model price)
-    def objective(vol):
-        return bs_pricing(strike, time_to_expiry, spot, rate, vol, put_call, cost_of_carry_rate='default') - market_price
-
-    # Use numerical solver to find implied volatility that results in the market price
-    iv = brentq(objective, 1e-6, 5)  # Bounded between 1e-6 and 5
-    return iv
-
-
-def calc_prob_exe(strike, time_to_expiry, spot, rate, vol, put_call, cost_of_carry_rate='default'):
-    '''
-    Calculate risk neutral probability of exercise
-    For calls: N(d2)
-    For puts: N(-d2)
-
-    Inputs Example:
-        strike = 450
-        t = date(year=2020,month=7,day=30)-date.today()
-        time_to_expiry = t.days/365
-        put_call = 'put'
-        vol = 0.3058
-        spot = 451.6
-        rate = 0.00893
-
-    '''
-    r = rate
-    # Price Expired Option and 0 vol with their intrinsic value
-    if ((time_to_expiry <= 0) or (vol == 0)) and (put_call == 'call'):
-        return min(0, spot - strike)
-    elif ((time_to_expiry <= 0) or (vol == 0)) and (put_call == 'put'):
-        return min(0, strike - spot)
-    # Reset underlying spot to a small number if it's 0 (The formula cannot take 0 underlying spot)
-    if spot == 0:
-        spot = 0.0000001
-    if cost_of_carry_rate == 'default':
-        b = r
-    else:
-        b = cost_of_carry_rate
-    # Calc N(d2) or N(-d2)
-    if put_call in ['put', 'call', 'p', 'c']:
-        d1 = (math.log(spot / strike) + (b + vol**2 / 2) * time_to_expiry) / (vol * time_to_expiry**0.5)
-        d2 = d1 - vol * time_to_expiry**0.5
-        if put_call in ['call', 'c']:
-            return norm.cdf(d2)
-        else:
-            return norm.cdf(-d2)
-    else:
-        return None
-
-
-def bt_pricing(strike, time_to_expiry, spot, rate, vol, put_call, N=25000):
-    '''
-    Binomial Tree Pricing for American Options
-
-    spot: spot stock price
-    strike: strike price
-    time_to_expiry: time to maturity in years
-    rate: risk free rate
-    vol: diffusion coefficient or volatility
-
-    N: number of periods or number of time steps
-    put_call: put or call
-
-    reference: https://github.com/cantaro86/Financial-Models-Numerical-Methods
-
-    '''
-
-    dT = float(time_to_expiry) / N  # Delta t
-    u = np.exp(vol * np.sqrt(dT))  # up factor
-    d = 1.0 / u  # down factor
-
-    V = np.zeros(N + 1)  # initialize the price vector
-    S_T = np.array([(spot * u**j * d ** (N - j)) for j in range(N + 1)])  # price S_T at time T
-
-    a = np.exp(rate * dT)  # risk free compound return
-    p = (a - d) / (u - d)  # risk neutral up probability
-    q = 1.0 - p  # risk neutral down probability
-
-    if put_call == "call":
-        V[:] = np.maximum(S_T - strike, 0.0)
-    elif put_call == "put":
-        V[:] = np.maximum(strike - S_T, 0.0)
-
-    for i in range(N - 1, -1, -1):
-        V[:-1] = np.exp(-rate * dT) * (p * V[1:] + q * V[:-1])  # the price vector is overwritten at each step
-        S_T = S_T * u  # it is a tricky way to obtain the price at the previous time step
-        if put_call == "call":
-            V = np.maximum(V, S_T - strike)
-        elif put_call == "put":
-            V = np.maximum(V, strike - S_T)
-
-    return V[0]
