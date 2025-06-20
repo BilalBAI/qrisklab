@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 from pandas import DataFrame
-from .black_scholes import bs_pricing, BS_PARAMETERS
+from .black_scholes import bsm_pricing, BS_PARAMETERS
 
 COLUMNS = ['spot_shock', 'vol_shock', 'vol_shock_mode', 'quantity', 'multiplier'] + BS_PARAMETERS
 COLUMNS2 = ['post_shock_spot', 'post_shock_vol', 'quantity', 'multiplier'] + BS_PARAMETERS
@@ -36,7 +36,7 @@ class StressTest2:
               cost_of_carry_rate, **kwargs
     ):
         # Pre shock valuation
-        pre_shock = bs_pricing(
+        pre_shock = bsm_pricing(
             strike=strike,
             time_to_expiry=time_to_expiry,
             spot=spot,
@@ -49,7 +49,7 @@ class StressTest2:
         post_shock_time_to_expiry = time_to_expiry + self.time_to_expiry_offset
 
         # Post shock valuation
-        post_shock = bs_pricing(
+        post_shock = bsm_pricing(
             strike=strike,
             time_to_expiry=post_shock_time_to_expiry,
             spot=post_shock_spot,
@@ -84,7 +84,7 @@ class StressTest:
             absolute: vol = vol + vol_shock;
         '''
         # Pre shock valuation
-        pre_shock = bs_pricing(
+        pre_shock = bsm_pricing(
             strike=strike,
             time_to_expiry=time_to_expiry,
             spot=spot,
@@ -100,7 +100,7 @@ class StressTest:
             post_shock_vol = vol * (1 + vol_shock)
         post_shock_spot = spot * (1 + spot_shock)
         # Post shock valuation
-        post_shock = bs_pricing(
+        post_shock = bsm_pricing(
             strike=strike,
             time_to_expiry=time_to_expiry,
             spot=post_shock_spot,

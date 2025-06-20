@@ -10,7 +10,7 @@ BS_PARAMETERS = DELTA_PARAMETERS = ['strike', 'time_to_expiry', 'spot', 'rate', 
 GAMMA_PARAMETERS = VEGA_PARAMETERS = ['strike', 'time_to_expiry', 'spot', 'rate', 'vol', 'cost_of_carry_rate']
 
 
-def bs_pricing(strike, time_to_expiry, spot, rate, vol, put_call, cost_of_carry_rate='default'):
+def bsm_pricing(strike, time_to_expiry, spot, rate, vol, put_call, cost_of_carry_rate='default'):
     '''
     Generalized Black-Scholes-Merton Option Pricing
 
@@ -278,24 +278,24 @@ def calc_greeks_fdm(strike, time_to_expiry, spot, rate, vol, put_call, cost_of_c
     dv = 0.0001  # Small change in volatility (e.g., 0.01%)
 
     # Compute base option price
-    V = bs_pricing(strike, time_to_expiry, spot, rate, vol, put_call, cost_of_carry_rate)
+    V = bsm_pricing(strike, time_to_expiry, spot, rate, vol, put_call, cost_of_carry_rate)
 
     # Delta: (∂V/∂S) ≈ (V(S + ΔS) - V(S - ΔS)) / (2 * ΔS)
-    V_plus_ds = bs_pricing(strike, time_to_expiry, spot + ds, rate, vol, put_call, cost_of_carry_rate)
-    V_minus_ds = bs_pricing(strike, time_to_expiry, spot - ds, rate, vol, put_call, cost_of_carry_rate)
+    V_plus_ds = bsm_pricing(strike, time_to_expiry, spot + ds, rate, vol, put_call, cost_of_carry_rate)
+    V_minus_ds = bsm_pricing(strike, time_to_expiry, spot - ds, rate, vol, put_call, cost_of_carry_rate)
     delta = (V_plus_ds - V_minus_ds) / (2 * ds)
 
     # Gamma: (∂²V/∂S²) ≈ (V(S + ΔS) - 2V(S) + V(S - ΔS)) / (ΔS²)
     gamma = (V_plus_ds - 2 * V + V_minus_ds) / (ds ** 2)
 
     # Vega: (∂V/∂σ) ≈ (V(σ + Δσ) - V(σ - Δσ)) / (2 * Δσ)
-    V_plus_dv = bs_pricing(strike, time_to_expiry, spot, rate, vol + dv, put_call, cost_of_carry_rate)
-    V_minus_dv = bs_pricing(strike, time_to_expiry, spot, rate, vol - dv, put_call, cost_of_carry_rate)
+    V_plus_dv = bsm_pricing(strike, time_to_expiry, spot, rate, vol + dv, put_call, cost_of_carry_rate)
+    V_minus_dv = bsm_pricing(strike, time_to_expiry, spot, rate, vol - dv, put_call, cost_of_carry_rate)
     vega = (V_plus_dv - V_minus_dv) / (2 * dv)
 
     # Theta: (∂V/∂t) ≈ -(V(t) - V(t - Δt)) / Δt
     # Note: Theta measures price decay, so we use backward difference and negate
-    V_minus_dt = bs_pricing(strike, time_to_expiry - dt, spot, rate, vol, put_call, cost_of_carry_rate)
+    V_minus_dt = bsm_pricing(strike, time_to_expiry - dt, spot, rate, vol, put_call, cost_of_carry_rate)
     theta = -(V - V_minus_dt) / dt
 
     # Normalization
@@ -329,7 +329,7 @@ def calc_implied_volatility(spot, strike, time_to_expiry, rate, market_price, pu
     """
     # Define the objective function (difference between market price and model price)
     def objective(vol):
-        return bs_pricing(strike, time_to_expiry, spot, rate, vol, put_call, cost_of_carry_rate='default') - market_price
+        return bsm_pricing(strike, time_to_expiry, spot, rate, vol, put_call, cost_of_carry_rate='default') - market_price
 
     # Use numerical solver to find implied volatility that results in the market price
     iv = brentq(objective, 1e-6, 5)  # Bounded between 1e-6 and 5
