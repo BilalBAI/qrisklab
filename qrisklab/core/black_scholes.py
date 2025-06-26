@@ -355,9 +355,9 @@ def calc_prob_exe(strike, time_to_expiry, spot, rate, vol, put_call, cost_of_car
     r = rate
     # Price Expired Option and 0 vol with their intrinsic value
     if ((time_to_expiry <= 0) or (vol == 0)) and (put_call == 'call'):
-        return min(0, spot - strike)
+        return min(max(0, spot - strike), 1)
     elif ((time_to_expiry <= 0) or (vol == 0)) and (put_call == 'put'):
-        return min(0, strike - spot)
+        return min(max(0, strike - spot), 1)
     # Reset underlying spot to a small number if it's 0 (The formula cannot take 0 underlying spot)
     if spot == 0:
         spot = 0.0000001
