@@ -6,7 +6,7 @@ This script demonstrates how to use amm_lp_valuation with:
 - Example option hedge position (3000 strike put expiring 27FEB26)
 """
 
-from qrisklab.core.amm_scenarios import amm_lp_valuation
+from qrisklab.core.amm_calc import amm_lp_valuation
 
 
 def test_amm_lp_valuation():

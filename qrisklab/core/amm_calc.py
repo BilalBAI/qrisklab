@@ -130,25 +130,6 @@ def calc_univ3_current_holdings(
     }
 
 
-# amm_pos = [{
-#     'lower_price': 2980.97,      # Lower bound
-#     'upper_price': 3463.36,      # Upper bound
-#     'initial_price': 3212.8,     # Initial price
-#     'initial_amount0': 0.25,     # 0.25 ETH
-#     'initial_amount1': 801.13,    # 801 USDT
-#     'decimals0': 18,
-#     'decimals1': 6
-# }]
-
-# option_hedge_pos = [{
-#     'strike': 3000,
-#     'expiry': '27FEB26',
-#     'put_call': 'put',
-#     'vol': 0.6179,
-#     'rate': 0.0
-# }]
-
-
 def amm_lp_valuation(
     current_price, valuation_datetime, amm_pos, option_hedge_pos
 ):

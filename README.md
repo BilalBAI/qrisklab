@@ -128,7 +128,7 @@ price = client.tick_to_price(100, 18, 6)  # tick, token0_decimals, token1_decima
 qrisklab includes tools for valuing AMM (Automated Market Maker) positions, particularly Uniswap V3 LP positions:
 
 ```python
-from qrisklab.core.amm_scenarios import amm_lp_valuation, calc_univ3_current_holdings
+from qrisklab.core.amm_calc import amm_lp_valuation, calc_univ3_current_holdings
 
 # Calculate current holdings in a Uniswap V3 position
 holdings = calc_univ3_current_holdings(

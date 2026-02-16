@@ -9,7 +9,7 @@ This script demonstrates how to:
 
 from datetime import datetime
 import pandas as pd
-from qrisklab.core.amm_mc_simulation import (
+from qrisklab.simulation_engine import (
     run_monte_carlo_analysis,
     summarize_mc_results
 )
