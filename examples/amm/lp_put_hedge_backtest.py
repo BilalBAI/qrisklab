@@ -30,6 +30,12 @@ PUT_STRIKE_PCT = 0.80       # 80% = 20% OTM (cheaper puts, less theta)
 PUT_EXPIRY_DAYS = 14        # Shorter tenor = less theta decay
 STEP_INTERVAL_HOURS = 1.0   # Hourly simulation (realistic per-step price moves)
 
+# Fee model (ETHUSDT 0.3% pool)
+POOL_FEE_RATE = 0.003              # 0.3% fee tier
+POOL_DAILY_VOLUME = 50_000_000     # $50M base daily volume
+POOL_ACTIVE_TVL = 30_000_000       # $30M active liquidity in similar ranges
+VOL_VOLUME_SENSITIVITY = 1.5       # Volume scales with vol
+
 
 def run_backtest():
     """Run backtest with joint spot + implied vol (OU) simulation."""
@@ -39,6 +45,7 @@ def run_backtest():
     print(f"\nConfig: hourly sim, drift={SPOT_DRIFT:.0%}, range=±{RANGE_PCT:.0%}")
     print(f"  Rebalance: after {REBALANCE_DELAY_HOURS}h out of range")
     print(f"  Put: strike {PUT_STRIKE_PCT:.0%} spot, {PUT_EXPIRY_DAYS}d tenor")
+    print(f"  Fees: {POOL_FEE_RATE:.1%} pool, ${POOL_DAILY_VOLUME/1e6:.0f}M daily vol, ${POOL_ACTIVE_TVL/1e6:.0f}M active TVL")
     print("  Implied vol: OU process per step")
     print()
 
@@ -47,13 +54,14 @@ def run_backtest():
     initial_price = 3000.0
     # Base 50/50 allocation; scale to hit target initial portfolio
     base_eth, base_usdt = initial_portfolio_usd / 2 / initial_price, initial_portfolio_usd / 2
+    # Calibration: disable fees for scaling (fees ~0 at step 0)
     _strat = LPPutHedgeStrategy(range_lower_pct=-RANGE_PCT, range_upper_pct=RANGE_PCT,
                                put_strike_pct=PUT_STRIKE_PCT, initial_eth=base_eth, initial_usdt=base_usdt,
-                               vol=0.6, put_expiry_days=PUT_EXPIRY_DAYS)
+                               vol=0.6, put_expiry_days=PUT_EXPIRY_DAYS,
+                               pool_fee_rate=0, pool_daily_volume=0, pool_active_tvl=0)
     _r = run_backtest_from_simulation(initial_price, 0.6, 2, 365, datetime(2025, 1, 15), _strat,
-                                      num_paths=1, use_spot_vol=True, rebalance_on_out_of_range=REBALANCE,
-                                      rebalance_delay_steps=REBALANCE_DELAY_HOURS, spot_drift=SPOT_DRIFT,
-                                      random_seed=42)
+                                      num_paths=1, use_spot_vol=True, spot_drift=SPOT_DRIFT,
+                                      step_interval_hours=STEP_INTERVAL_HOURS, random_seed=42)
     scale = initial_portfolio_usd / _r["portfolio_value"].iloc[0]
     strategy = LPPutHedgeStrategy(
         range_lower_pct=-RANGE_PCT,
@@ -62,7 +70,11 @@ def run_backtest():
         initial_eth=base_eth * scale,
         initial_usdt=base_usdt * scale,
         vol=0.6,
-        put_expiry_days=PUT_EXPIRY_DAYS
+        put_expiry_days=PUT_EXPIRY_DAYS,
+        pool_fee_rate=POOL_FEE_RATE,
+        pool_daily_volume=POOL_DAILY_VOLUME,
+        pool_active_tvl=POOL_ACTIVE_TVL,
+        vol_volume_sensitivity=VOL_VOLUME_SENSITIVITY
     )
 
     num_paths = 20
@@ -90,8 +102,8 @@ def run_backtest():
     # Display results (path 0 sample)
     has_paths = 'path_id' in results.columns
     path0 = results[results['path_id'] == 0] if has_paths else results
-    display_cols = ['datetime', 'price', 'implied_vol', 'lp_value', 'put_value', 'portfolio_value',
-                    'delta_lp', 'delta_put', 'theta_approx', 'in_range', 'rebalanced']
+    display_cols = ['datetime', 'price', 'implied_vol', 'lp_value', 'put_value',
+                    'fee_earned', 'cumulative_fees', 'portfolio_value', 'in_range', 'rebalanced']
     print(f"\nPath 0 — first 10 steps:")
     print(path0[display_cols].head(10))
 
@@ -132,6 +144,16 @@ def run_backtest():
         print(f"  Mean delta_lp per step:    ${results.loc[valid_delta, 'delta_lp'].mean():,.2f}")
         print(f"  Mean delta_put per step:   ${results.loc[valid_delta, 'delta_put'].mean():,.2f}")
         print(f"  Mean theta_approx per step: ${results.loc[valid_delta, 'theta_approx'].mean():,.2f}")
+        print(f"  Mean fee_earned per step:  ${results['fee_earned'].mean():,.2f}")
+
+    # Fee summary
+    if has_paths:
+        fee_summary = results.groupby('path_id')['cumulative_fees'].last()
+        print(f"\nFee income (per path over {365}d):")
+        print(f"  Mean:   ${fee_summary.mean():,.2f}")
+        print(f"  Min:    ${fee_summary.min():,.2f}")
+        print(f"  Max:    ${fee_summary.max():,.2f}")
+        print(f"  Fee APR (mean): {fee_summary.mean() / initial_portfolio_usd * 100:.1f}%")
 
     # Chart: underlying price paths + portfolio value paths
     if has_paths:

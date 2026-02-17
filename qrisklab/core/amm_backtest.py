@@ -29,6 +29,12 @@ class LPPutHedgeStrategy:
     put_expiry_days: int = 30        # Put option tenor
     decimals0: int = 18               # ETH decimals
     decimals1: int = 6               # USDT decimals
+    # Fee model (volume-based, 0.3% pool)
+    pool_fee_rate: float = 0.003            # 0.3% fee tier
+    pool_daily_volume: float = 50_000_000   # $50M base daily volume
+    pool_active_tvl: float = 30_000_000     # $30M active liquidity in similar ranges
+    vol_volume_sensitivity: float = 1.5     # Volume scales with vol: 1 + sens*(vol/vol_lr - 1)
+    vol_long_run: float = 0.6              # Long-run vol for volume scaling baseline
 
 
 def _parse_datetime(dt) -> datetime:
@@ -190,6 +196,15 @@ def run_lp_put_hedge_backtest(
         start_dt = start_datetime
     put_expiry = start_dt + timedelta(days=strategy.put_expiry_days)
 
+    # Compute step size in years for fee accrual
+    dts = price_path_df['datetime']
+    if len(dts) > 1:
+        dt0 = _parse_datetime(dts.iloc[0])
+        dt1 = _parse_datetime(dts.iloc[1])
+        step_years = (dt1 - dt0).total_seconds() / (365.25 * 24 * 3600)
+    else:
+        step_years = 1.0 / 365.25
+
     # Run backtest
     has_paths = path_id_col and path_id_col in price_path_df.columns
     path_ids = price_path_df[path_id_col].unique() if has_paths else [None]
@@ -219,6 +234,7 @@ def run_lp_put_hedge_backtest(
         prev_put_quantity = None
         prev_vol = None
         consecutive_out_of_range_steps = 0
+        cumulative_fees = 0.0
 
         for idx, row in path_data.iterrows():
             current_price = float(row[price_col])
@@ -289,6 +305,18 @@ def run_lp_put_hedge_backtest(
                 rebalanced = True
                 consecutive_out_of_range_steps = 0
 
+            # Fee accrual (volume-based, only when in range)
+            step_fee = 0.0
+            if in_range and strategy.pool_fee_rate > 0 and strategy.pool_daily_volume > 0:
+                vol_ratio = vol / strategy.vol_long_run if strategy.vol_long_run > 0 else 1.0
+                vol_adj = 1.0 + strategy.vol_volume_sensitivity * (vol_ratio - 1.0)
+                vol_adj = max(vol_adj, 0.1)
+                hourly_volume = strategy.pool_daily_volume / 24.0 * vol_adj
+                step_volume = hourly_volume * (step_years * 365.25 * 24)
+                liq_share = lp_value / strategy.pool_active_tvl if strategy.pool_active_tvl > 0 else 0.0
+                step_fee = step_volume * strategy.pool_fee_rate * liq_share
+            cumulative_fees += step_fee
+
             # Put value: time to expiry decreases along path
             time_to_expiry = _tte_years(put_expiry_cur, dt_val)
 
@@ -330,7 +358,9 @@ def run_lp_put_hedge_backtest(
                 'lp_token1': holdings.get('amount1', 0.0),
                 'lp_value': lp_value,
                 'put_value': put_value,
-                'portfolio_value': lp_value + put_value,
+                'fee_earned': step_fee,
+                'cumulative_fees': cumulative_fees,
+                'portfolio_value': lp_value + put_value + cumulative_fees,
                 'delta_lp': delta_lp,
                 'delta_put': delta_put,
                 'theta_approx': theta_approx,
