@@ -106,6 +106,7 @@ def simulate_spot_vol_paths(
     vol_of_vol: float = 0.3,
     spot_vol_correlation: float = -0.5,
     num_paths: int = 1,
+    step_interval_hours: Optional[float] = None,
     random_seed: Optional[int] = None
 ) -> pd.DataFrame:
     """
@@ -127,6 +128,8 @@ def simulate_spot_vol_paths(
         vol_of_vol: Volatility of volatility (xi)
         spot_vol_correlation: Correlation between spot and vol shocks (rho, typically negative)
         num_paths: Number of independent paths to simulate
+        step_interval_hours: If set, use hourly (or N-hourly) steps; overrides num_steps.
+                             E.g., 1.0 = hourly, 24.0 = daily. dt scales for realistic per-step moves.
         random_seed: Optional random seed for reproducibility
 
     Returns:
@@ -139,7 +142,13 @@ def simulate_spot_vol_paths(
     """
     vol_long_run = vol_long_run if vol_long_run is not None else initial_vol
 
-    dt = (time_horizon_days / 365.0) / num_steps
+    if step_interval_hours is not None:
+        num_steps = int(time_horizon_days * 24 / step_interval_hours)
+        dt = step_interval_hours / (365.25 * 24)
+        use_hourly_datetimes = True
+    else:
+        dt = (time_horizon_days / 365.0) / num_steps
+        use_hourly_datetimes = False
     rng = np.random.default_rng(random_seed)
 
     all_rows = []
@@ -174,10 +183,16 @@ def simulate_spot_vol_paths(
                 + vol_of_vol * np.sqrt(dt) * Z2[i]
             vol_path[i + 1] = np.maximum(vol_path[i + 1], 0.01)  # Floor at 1%
 
-        datetimes = [
-            start_datetime + timedelta(days=time_horizon_days * i / num_steps)
-            for i in range(num_steps + 1)
-        ]
+        if use_hourly_datetimes:
+            datetimes = [
+                start_datetime + timedelta(hours=i * step_interval_hours)
+                for i in range(num_steps + 1)
+            ]
+        else:
+            datetimes = [
+                start_datetime + timedelta(days=time_horizon_days * i / num_steps)
+                for i in range(num_steps + 1)
+            ]
 
         for i in range(num_steps + 1):
             row = {
