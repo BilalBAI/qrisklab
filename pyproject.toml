@@ -1,0 +1,52 @@
+[project]
+name = "qrisklab"
+version = "3.7.0"
+description = "A python-based Quantitative Risk Analytics Toolkit"
+readme = "README.md"
+requires-python = ">=3.12"
+authors = [
+    { name = "Bilal", email = "bilal.yue.bai@gmail.com" }
+]
+license = { text = "MIT" }
+
+dependencies = [
+    "pandas",
+    "numpy",
+    "scipy",
+    "requests",
+    "matplotlib",
+    "plotly",
+    "ipywidgets",
+    "nbformat",
+]
+
+[project.urls]
+Homepage = "https://github.com/BilalBAI/qrisklab"
+Repository = "https://github.com/BilalBAI/qrisklab"
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-cov",
+]
+bloomberg = [
+    "blp",
+    "sqlalchemy",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["qrisklab"]
+
+[tool.pytest.ini_options]
+markers = ["wip"]
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W"]
+ignore = ["E124", "E722", "W503", "W504"]

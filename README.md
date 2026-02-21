@@ -11,51 +11,45 @@ qrisklab is a python-based Quantitative Risk Analytics Toolkit including:
 
 ## Installation
 
-Run the following to create a qrisklab conda environment:
+### Using uv (recommended)
 
 ```bash
-conda create -n qrisklab python=3.12 pip wheel
-conda activate qrisklab
+# Install uv if you don't have it
+curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Download and install package
-python -m pip install -e .
-# Or install directly
-pip install git+https://github.com/BilalBAI/qrisklab.git
+# Clone and install
+git clone https://github.com/BilalBAI/qrisklab.git
+cd qrisklab
+uv sync
 
+# Run scripts
+uv run python examples/amm/lp_put_hedge_backtest.py
+
+# Install with dev dependencies
+uv sync --extra dev
 ```
 
-Run the following to create a qrisklab venv:
+### Using pip
 
 ```bash
-# Create the virtual environment with Python 3.12
-which python3.12
-python3.12 -m venv qrisklab_env
-
-# Activate the virtual environment
-# Windows
-qrisklab_env\Scripts\activate
-# macOS / Linux
-source qrisklab_env/bin/activate
-
-# Verify the Python version
-python --version
-
-# Download and install package
-python -m pip install -e .
-# Or install directly
 pip install git+https://github.com/BilalBAI/qrisklab.git
 
-# Deactivate the virtual environment when done
-deactivate
+# Or for development
+git clone https://github.com/BilalBAI/qrisklab.git
+cd qrisklab
+pip install -e ".[dev]"
 ```
 
 ### Bloomberg (BBG Terminal should be logged in and API enabled)
-```ini
-python -m pip install --index-url=https://blpapi.bloomberg.com/repository/releases/python/simple/ blpapi
+```bash
+# Install blpapi from Bloomberg's private index first
+pip install --index-url=https://blpapi.bloomberg.com/repository/releases/python/simple/ blpapi
 
-pip install blp
-
-pip install sqlalchemy
+# Then install the bloomberg extras
+pip install -e ".[bloomberg]"
+# Or with uv
+uv pip install --index-url=https://blpapi.bloomberg.com/repository/releases/python/simple/ blpapi
+uv sync --extra bloomberg
 ```
 
 In the `.env` you need the following keys:
