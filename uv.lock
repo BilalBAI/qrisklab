@@ -1015,7 +1015,7 @@ wheels = [
 
 [[package]]
 name = "qrisklab"
-version = "3.6.7"
+version = "3.7.0"
 source = { editable = "." }
 dependencies = [
     { name = "ipywidgets" },

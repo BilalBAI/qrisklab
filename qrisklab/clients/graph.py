@@ -8,70 +8,15 @@ import requests
 import pandas as pd
 from typing import Dict, Any, Optional, List
 
-
-# https://docs.uniswap.org/api/subgraph/overview
-# Uniswap V3
-UNISWAP_V3_ENDPOINT = 'https://gateway.thegraph.com/api/subgraphs/id/5zvR82QoaXYFyDEKLZ9t6v9adgnptxYpKpSbxtgVENFV'
-
-UNISWAP_V3_QUERY_EXAMPLE = """{
-  pools(
-    first: 50
-    skip: 0
-    orderBy: totalValueLockedUSD
-    orderDirection: desc
-  ) {
-    id
-    feeTier
-    tick
-    liquidity
-    sqrtPrice
-    totalValueLockedUSD
-    volumeUSD
-    txCount
-    createdAtTimestamp
-    token0 { id symbol name decimals }
-    token1 { id symbol name decimals }
-  }
-}"""
-
-# Uniswap V4
-UNISWAP_V4_ENDPOINT = 'https://gateway.thegraph.com/api/subgraphs/id/DiYPVdygkfjDWhbxGSqAQxwBKmfKnkWQojqeM2rkLb3G'
-UNISWAP_V4_QUERY_EXAMPLE = """ 
-{
-  poolManager(id: "0x000000000004444c5dc75cb358380d2e3de08a90") {
-    poolCount
-    txCount
-    totalVolumeUSD
-    totalVolumeETH
-  }
-
-  bundles(first: 1) {
-    id
-    ethPriceUSD
-  }
-
-  pools(
-    first: 50
-    orderBy: totalValueLockedUSD
-    orderDirection: desc
-  ) {
-    id
-    createdAtTimestamp
-    token0 { id symbol decimals }
-    token1 { id symbol decimals }
-    feeTier
-    liquidity
-    sqrtPrice
-    tick
-    token0Price
-    token1Price
-    totalValueLockedUSD
-    volumeUSD
-    txCount
-  }
-}
-
-"""
+from qrisklab.clients.graph_query import (
+    UNISWAP_V3_ENDPOINT,
+    UNISWAP_V4_ENDPOINT,
+    v3_pool_query,
+    v3_pools_query,
+    v3_ticks_query,
+    v3_positions_query,
+    v3_swaps_query,
+)
 
 
 class GraphClient:
@@ -233,34 +178,7 @@ class UniV3GraphClient(GraphClient):
             - id, feeTier, tick, liquidity, sqrtPrice
             - token0 and token1 information
         """
-        query = f"""
-        {{
-          pool(id: "{pool_address.lower()}") {{
-            id
-            feeTier
-            tick
-            liquidity
-            sqrtPrice
-            totalValueLockedUSD
-            volumeUSD
-            txCount
-            createdAtTimestamp
-            token0 {{
-              id
-              symbol
-              name
-              decimals
-            }}
-            token1 {{
-              id
-              symbol
-              name
-              decimals
-            }}
-          }}
-        }}
-        """
-        data = self.query(query)
+        data = self.query(v3_pool_query(pool_address))
         return data.get('pool', {})
 
     def get_pools(
@@ -284,42 +202,11 @@ class UniV3GraphClient(GraphClient):
         Returns:
             DataFrame with pool data
         """
-        where_clause = ""
-        if where:
-            conditions = []
-            for key, value in where.items():
-                if isinstance(value, str):
-                    conditions.append(f'{key}: "{value}"')
-                elif isinstance(value, (int, float)):
-                    conditions.append(f"{key}: {value}")
-                elif isinstance(value, bool):
-                    conditions.append(f"{key}: {str(value).lower()}")
-            if conditions:
-                where_clause = f", where: {{{', '.join(conditions)}}}"
-
-        query = f"""
-        {{
-          pools(
-            first: {first}
-            skip: {skip}
-            orderBy: {order_by}
-            orderDirection: {order_direction}
-            {where_clause}
-          ) {{
-            id
-            feeTier
-            tick
-            liquidity
-            sqrtPrice
-            totalValueLockedUSD
-            volumeUSD
-            txCount
-            createdAtTimestamp
-            token0 {{ id symbol name decimals }}
-            token1 {{ id symbol name decimals }}
-          }}
-        }}
-        """
+        query = v3_pools_query(
+            first=first, skip=skip,
+            order_by=order_by, order_direction=order_direction,
+            where=where,
+        )
         return self.query_to_dataframe(query, key='pools')
 
     def get_ticks(
@@ -341,25 +228,10 @@ class UniV3GraphClient(GraphClient):
         Returns:
             List of tick dictionaries with tickIdx, liquidityGross, liquidityNet
         """
-        where_condition = f'poolAddress: "{pool_address.lower()}"'
-        if liquidity_net_not_zero:
-            where_condition += ', liquidityNet_not: "0"'
-
-        query = f"""
-        {{
-          ticks(
-            where: {{{where_condition}}}
-            first: {first}
-            skip: {skip}
-            orderBy: tickIdx
-            orderDirection: asc
-          ) {{
-            tickIdx
-            liquidityGross
-            liquidityNet
-          }}
-        }}
-        """
+        query = v3_ticks_query(
+            pool_address, first=first, skip=skip,
+            liquidity_net_not_zero=liquidity_net_not_zero,
+        )
         data = self.query(query)
         return data.get('ticks', [])
 
@@ -413,47 +285,10 @@ class UniV3GraphClient(GraphClient):
         Returns:
             DataFrame with position data
         """
-        where_conditions = []
-        if pool_address:
-            where_conditions.append(f'pool: "{pool_address.lower()}"')
-        if owner:
-            where_conditions.append(f'owner: "{owner.lower()}"')
-
-        where_clause = ""
-        if where_conditions:
-            where_clause = f", where: {{{', '.join(where_conditions)}}}"
-
-        query = f"""
-        {{
-          positions(
-            first: {first}
-            skip: {skip}
-            {where_clause}
-          ) {{
-            id
-            owner
-            pool {{
-              id
-              token0 {{ symbol decimals }}
-              token1 {{ symbol decimals }}
-              feeTier
-            }}
-            tickLower
-            tickUpper
-            liquidity
-            depositedToken0
-            depositedToken1
-            withdrawnToken0
-            withdrawnToken1
-            collectedFeesToken0
-            collectedFeesToken1
-            transaction {{
-              timestamp
-              blockNumber
-            }}
-          }}
-        }}
-        """
+        query = v3_positions_query(
+            pool_address=pool_address, owner=owner,
+            first=first, skip=skip,
+        )
         return self.query_to_dataframe(query, key='positions')
 
     def get_swaps(
@@ -477,38 +312,10 @@ class UniV3GraphClient(GraphClient):
         Returns:
             DataFrame with swap data
         """
-        where_clause = ""
-        if pool_address:
-            where_clause = f', where: {{pool: "{pool_address.lower()}"}}'
-
-        query = f"""
-        {{
-          swaps(
-            first: {first}
-            skip: {skip}
-            orderBy: {order_by}
-            orderDirection: {order_direction}
-            {where_clause}
-          ) {{
-            id
-            transaction {{
-              id
-              timestamp
-              blockNumber
-            }}
-            pool {{
-              id
-              token0 {{ symbol }}
-              token1 {{ symbol }}
-            }}
-            amount0
-            amount1
-            amountUSD
-            sqrtPriceX96
-            tick
-          }}
-        }}
-        """
+        query = v3_swaps_query(
+            pool_address=pool_address, first=first, skip=skip,
+            order_by=order_by, order_direction=order_direction,
+        )
         return self.query_to_dataframe(query, key='swaps')
 
     # Utility functions for Uniswap V3 calculations
