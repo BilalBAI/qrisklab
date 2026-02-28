@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 from dataclasses import dataclass
 
-from .amm_calc import calc_univ3_current_holdings
+from .amm_valuation import calc_current_holdings
 from .black_scholes import bsm_pricing
 
 
@@ -115,7 +115,7 @@ def _compute_put_quantity(
     """
     # Use price slightly below lower bound to ensure we're in "below range" regime
     price_below_range = lower_price * 0.999
-    holdings = calc_univ3_current_holdings(
+    holdings = calc_current_holdings(
         current_price=price_below_range,
         lower_price=lower_price,
         upper_price=upper_price,
@@ -246,7 +246,7 @@ def run_lp_put_hedge_backtest(
             dt_val = _parse_datetime(dt)
 
             # LP value using current position state
-            holdings = calc_univ3_current_holdings(
+            holdings = calc_current_holdings(
                 current_price=current_price,
                 lower_price=lp_lower,
                 upper_price=lp_upper,
@@ -290,7 +290,7 @@ def run_lp_put_hedge_backtest(
                     spot=current_price, rate=strategy.rate, vol=vol, put_call='put'
                 )
                 put_roll_cashflow = put_value_cur - put_cost
-                holdings = calc_univ3_current_holdings(
+                holdings = calc_current_holdings(
                     current_price=current_price,
                     lower_price=lp_lower,
                     upper_price=lp_upper,
