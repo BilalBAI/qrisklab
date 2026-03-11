@@ -308,131 +308,131 @@ def calc_delta_gamma_analytic(
     return delta, gamma
 
 
-def amm_lp_valuation(
-    current_price, valuation_datetime, amm_pos, option_hedge_pos
-):
-    """
-    Calculate valuation for AMM LP positions and option hedge positions.
+# def amm_lp_valuation(
+#     current_price, valuation_datetime, amm_pos, option_hedge_pos
+# ):
+#     """
+#     Calculate valuation for AMM LP positions and option hedge positions.
 
-    Args:
-        current_price: Current token0 price in token1 terms (e.g., 1 WETH = 3000 USDT)
-        valuation_datetime: Valuation datetime (datetime object or string like "2025-06-17 13:45:30")
-        amm_pos: List of dicts containing AMM position parameters
-        option_hedge_pos: List of dicts containing option hedge position parameters
+#     Args:
+#         current_price: Current token0 price in token1 terms (e.g., 1 WETH = 3000 USDT)
+#         valuation_datetime: Valuation datetime (datetime object or string like "2025-06-17 13:45:30")
+#         amm_pos: List of dicts containing AMM position parameters
+#         option_hedge_pos: List of dicts containing option hedge position parameters
 
-    Returns:
-        dict with:
-            - amm_positions: List of valuation results for each AMM position
-            - option_positions: List of valuation results for each option position
-            - total_amm_value: Sum of all AMM position values
-            - total_option_value: Sum of all option position values
-            - total_portfolio_value: Total portfolio value (AMM + options)
-    """
-    # Convert valuation_datetime to datetime object if it's a string
-    if isinstance(valuation_datetime, str):
-        try:
-            valuation_datetime = datetime.strptime(
-                valuation_datetime, "%Y-%m-%d %H:%M:%S")
-        except ValueError:
-            try:
-                valuation_datetime = datetime.strptime(
-                    valuation_datetime, "%Y-%m-%d")
-            except ValueError:
-                raise ValueError(
-                    f"Unable to parse valuation_datetime: {valuation_datetime}")
+#     Returns:
+#         dict with:
+#             - amm_positions: List of valuation results for each AMM position
+#             - option_positions: List of valuation results for each option position
+#             - total_amm_value: Sum of all AMM position values
+#             - total_option_value: Sum of all option position values
+#             - total_portfolio_value: Total portfolio value (AMM + options)
+#     """
+#     # Convert valuation_datetime to datetime object if it's a string
+#     if isinstance(valuation_datetime, str):
+#         try:
+#             valuation_datetime = datetime.strptime(
+#                 valuation_datetime, "%Y-%m-%d %H:%M:%S")
+#         except ValueError:
+#             try:
+#                 valuation_datetime = datetime.strptime(
+#                     valuation_datetime, "%Y-%m-%d")
+#             except ValueError:
+#                 raise ValueError(
+#                     f"Unable to parse valuation_datetime: {valuation_datetime}")
 
-    # Price all option hedge positions
-    option_results = []
-    total_option_value = 0.0
+#     # Price all option hedge positions
+#     option_results = []
+#     total_option_value = 0.0
 
-    for idx, opt_pos in enumerate(option_hedge_pos):
-        # Parse expiry date (format like '27FEB26')
-        expiry_str = opt_pos.get('expiry')
-        if expiry_str:
-            try:
-                expiry_date = datetime.strptime(expiry_str, '%d%b%y')
-            except ValueError:
-                raise ValueError(f"Unable to parse expiry date: {expiry_str}")
+#     for idx, opt_pos in enumerate(option_hedge_pos):
+#         # Parse expiry date (format like '27FEB26')
+#         expiry_str = opt_pos.get('expiry')
+#         if expiry_str:
+#             try:
+#                 expiry_date = datetime.strptime(expiry_str, '%d%b%y')
+#             except ValueError:
+#                 raise ValueError(f"Unable to parse expiry date: {expiry_str}")
 
-            # Calculate time to expiry in years
-            time_to_expiry = (expiry_date - valuation_datetime).days / 365.0
-            # Ensure time_to_expiry is not negative
-            time_to_expiry = max(0.0, time_to_expiry)
-        else:
-            time_to_expiry = 0.0
+#             # Calculate time to expiry in years
+#             time_to_expiry = (expiry_date - valuation_datetime).days / 365.0
+#             # Ensure time_to_expiry is not negative
+#             time_to_expiry = max(0.0, time_to_expiry)
+#         else:
+#             time_to_expiry = 0.0
 
-        # Get option parameters
-        strike = opt_pos.get('strike', 0)
-        vol = opt_pos.get('vol', 0)
-        rate = opt_pos.get('rate', 0.0)
-        put_call = opt_pos.get('put_call', 'call')
+#         # Get option parameters
+#         strike = opt_pos.get('strike', 0)
+#         vol = opt_pos.get('vol', 0)
+#         rate = opt_pos.get('rate', 0.0)
+#         put_call = opt_pos.get('put_call', 'call')
 
-        # Price the option using Black-Scholes
-        option_price = bsm_pricing(
-            strike=strike,
-            time_to_expiry=time_to_expiry,
-            spot=current_price,
-            rate=rate,
-            vol=vol,
-            put_call=put_call
-        )
+#         # Price the option using Black-Scholes
+#         option_price = bsm_pricing(
+#             strike=strike,
+#             time_to_expiry=time_to_expiry,
+#             spot=current_price,
+#             rate=rate,
+#             vol=vol,
+#             put_call=put_call
+#         )
 
-        option_result = {
-            'position_id': idx,
-            'strike': strike,
-            'expiry': expiry_str,
-            'put_call': put_call,
-            'vol': vol,
-            'rate': rate,
-            'time_to_expiry': time_to_expiry,
-            'option_price': float(option_price)
-        }
-        option_results.append(option_result)
-        total_option_value += option_price
+#         option_result = {
+#             'position_id': idx,
+#             'strike': strike,
+#             'expiry': expiry_str,
+#             'put_call': put_call,
+#             'vol': vol,
+#             'rate': rate,
+#             'time_to_expiry': time_to_expiry,
+#             'option_price': float(option_price)
+#         }
+#         option_results.append(option_result)
+#         total_option_value += option_price
 
-    # Price all AMM positions
-    amm_results = []
-    total_amm_value = 0.0
+#     # Price all AMM positions
+#     amm_results = []
+#     total_amm_value = 0.0
 
-    for idx, amm in enumerate(amm_pos):
-        holdings = calc_current_holdings(
-            current_price=current_price,
-            lower_price=amm.get('lower_price', 0),
-            upper_price=amm.get('upper_price', 0),
-            initial_price=amm.get('initial_price', current_price),
-            initial_amount0=amm.get('initial_amount0', 0),
-            initial_amount1=amm.get('initial_amount1', 0),
-            decimals0=amm.get('decimals0', 18),
-            decimals1=amm.get('decimals1', 18)
-        )
+#     for idx, amm in enumerate(amm_pos):
+#         holdings = calc_current_holdings(
+#             current_price=current_price,
+#             lower_price=amm.get('lower_price', 0),
+#             upper_price=amm.get('upper_price', 0),
+#             initial_price=amm.get('initial_price', current_price),
+#             initial_amount0=amm.get('initial_amount0', 0),
+#             initial_amount1=amm.get('initial_amount1', 0),
+#             decimals0=amm.get('decimals0', 18),
+#             decimals1=amm.get('decimals1', 18)
+#         )
 
-        amm_result = {
-            'position_id': idx,
-            'lower_price': amm.get('lower_price'),
-            'upper_price': amm.get('upper_price'),
-            'initial_price': amm.get('initial_price'),
-            'current_price': current_price,
-            'amount0': holdings.get('amount0', 0.0),
-            'amount1': holdings.get('amount1', 0.0),
-            'value_in_token1': holdings.get('value_in_token1', 0.0),
-            'in_range': holdings.get('in_range', False),
-            'liquidity': holdings.get('liquidity', 0.0)
-        }
-        amm_results.append(amm_result)
-        total_amm_value += holdings.get('value_in_token1', 0.0)
+#         amm_result = {
+#             'position_id': idx,
+#             'lower_price': amm.get('lower_price'),
+#             'upper_price': amm.get('upper_price'),
+#             'initial_price': amm.get('initial_price'),
+#             'current_price': current_price,
+#             'amount0': holdings.get('amount0', 0.0),
+#             'amount1': holdings.get('amount1', 0.0),
+#             'value_in_token1': holdings.get('value_in_token1', 0.0),
+#             'in_range': holdings.get('in_range', False),
+#             'liquidity': holdings.get('liquidity', 0.0)
+#         }
+#         amm_results.append(amm_result)
+#         total_amm_value += holdings.get('value_in_token1', 0.0)
 
-    # Calculate total portfolio value
-    total_portfolio_value = total_amm_value + total_option_value
+#     # Calculate total portfolio value
+#     total_portfolio_value = total_amm_value + total_option_value
 
-    return {
-        'amm_positions': amm_results,
-        'option_positions': option_results,
-        'total_amm_value': float(total_amm_value),
-        'total_option_value': float(total_option_value),
-        'total_portfolio_value': float(total_portfolio_value),
-        'valuation_datetime': valuation_datetime.strftime("%Y-%m-%d %H:%M:%S") if isinstance(valuation_datetime, datetime) else str(valuation_datetime),
-        'current_price': current_price
-    }
+#     return {
+#         'amm_positions': amm_results,
+#         'option_positions': option_results,
+#         'total_amm_value': float(total_amm_value),
+#         'total_option_value': float(total_option_value),
+#         'total_portfolio_value': float(total_portfolio_value),
+#         'valuation_datetime': valuation_datetime.strftime("%Y-%m-%d %H:%M:%S") if isinstance(valuation_datetime, datetime) else str(valuation_datetime),
+#         'current_price': current_price
+#     }
 
 
 # def lp_valuation(
@@ -488,62 +488,3 @@ def amm_lp_valuation(
 #         )
 
 #     return value
-
-
-# ============================================================================
-# CONVENIENCE WRAPPER — symmetric range LP position
-# ============================================================================
-
-def calc_lp_position(spot: float, capital: float, range_pct: float) -> dict:
-    """
-    Compute LP greeks and initial holdings for a symmetric ±range_pct position.
-
-    This is a convenience wrapper around ``_calc_optimal_liq`` and
-    ``calc_delta_gamma_analytic`` for the common case where pa and pb are
-    set symmetrically around the current spot.
-
-    Parameters
-    ----------
-    spot : float
-        Current ETH price (USD).
-    capital : float
-        Capital deployed in USD.
-    range_pct : float
-        Half-width of price range as a fraction, e.g. 0.22 → ±22%.
-
-    Returns
-    -------
-    dict with keys: pa, pb, L, delta_lp, gamma_lp, amt0, amt1,
-    entry_spot, capital.
-
-    Formulas (from lp_greeks_model.md):
-        pa   = S × (1 − r),  pb   = S × (1 + r)
-        L    = C / (2√S − √pa − S/√pb)
-        Δ_LP = L × (1/√S − 1/√pb)    [ETH]
-        Γ_LP = −L / (2 × S^1.5)      [$/($²), always ≤ 0]
-        amt0 = Δ_LP                   [initial ETH]
-        amt1 = L × (√S − √pa)        [initial USD]
-    """
-    pa = spot * (1.0 - range_pct)
-    pb = spot * (1.0 + range_pct)
-    sq_S = math.sqrt(spot)
-    sq_a = math.sqrt(pa)
-    sq_b = math.sqrt(pb)
-
-    L        = capital / (2.0 * sq_S - sq_a - spot / sq_b)
-    delta_lp = L * (1.0 / sq_S - 1.0 / sq_b)    # ETH
-    gamma_lp = -L / (2.0 * spot ** 1.5)           # $/($²)
-    amt0     = delta_lp                            # initial ETH
-    amt1     = L * (sq_S - sq_a)                  # initial USD
-
-    return {
-        "pa":          pa,
-        "pb":          pb,
-        "L":           L,
-        "delta_lp":    delta_lp,
-        "gamma_lp":    gamma_lp,
-        "amt0":        amt0,
-        "amt1":        amt1,
-        "entry_spot":  spot,
-        "capital":     capital,
-    }
