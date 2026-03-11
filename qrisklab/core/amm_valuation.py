@@ -488,3 +488,62 @@ def amm_lp_valuation(
 #         )
 
 #     return value
+
+
+# ============================================================================
+# CONVENIENCE WRAPPER — symmetric range LP position
+# ============================================================================
+
+def calc_lp_position(spot: float, capital: float, range_pct: float) -> dict:
+    """
+    Compute LP greeks and initial holdings for a symmetric ±range_pct position.
+
+    This is a convenience wrapper around ``_calc_optimal_liq`` and
+    ``calc_delta_gamma_analytic`` for the common case where pa and pb are
+    set symmetrically around the current spot.
+
+    Parameters
+    ----------
+    spot : float
+        Current ETH price (USD).
+    capital : float
+        Capital deployed in USD.
+    range_pct : float
+        Half-width of price range as a fraction, e.g. 0.22 → ±22%.
+
+    Returns
+    -------
+    dict with keys: pa, pb, L, delta_lp, gamma_lp, amt0, amt1,
+    entry_spot, capital.
+
+    Formulas (from lp_greeks_model.md):
+        pa   = S × (1 − r),  pb   = S × (1 + r)
+        L    = C / (2√S − √pa − S/√pb)
+        Δ_LP = L × (1/√S − 1/√pb)    [ETH]
+        Γ_LP = −L / (2 × S^1.5)      [$/($²), always ≤ 0]
+        amt0 = Δ_LP                   [initial ETH]
+        amt1 = L × (√S − √pa)        [initial USD]
+    """
+    pa = spot * (1.0 - range_pct)
+    pb = spot * (1.0 + range_pct)
+    sq_S = math.sqrt(spot)
+    sq_a = math.sqrt(pa)
+    sq_b = math.sqrt(pb)
+
+    L        = capital / (2.0 * sq_S - sq_a - spot / sq_b)
+    delta_lp = L * (1.0 / sq_S - 1.0 / sq_b)    # ETH
+    gamma_lp = -L / (2.0 * spot ** 1.5)           # $/($²)
+    amt0     = delta_lp                            # initial ETH
+    amt1     = L * (sq_S - sq_a)                  # initial USD
+
+    return {
+        "pa":          pa,
+        "pb":          pb,
+        "L":           L,
+        "delta_lp":    delta_lp,
+        "gamma_lp":    gamma_lp,
+        "amt0":        amt0,
+        "amt1":        amt1,
+        "entry_spot":  spot,
+        "capital":     capital,
+    }
